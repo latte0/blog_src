@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>$blogname$$if(title)$ - $title$$endif$</title>
+    <style>$sanitizecss$</style>
+    <style>$maincss$</style>
+    $if(katex)$
+      <link rel="stylesheet" href="/css/katex.min.css">
+    $endif$
+  </head>
+  <body>
+    <header>
+      <nav>
+        <a href="/" id="blogname">$blogname$</a>
+        <a href="/about.html">about</a>
+        <a href="/archive.html">archive</a>
+      </nav>
+    </header>
+    <main role="main">
+      $body$
+    </main>
+    <footer>
+      <small>mt_caret</small>
+      <a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img alt="Creative Commons License" style="border-width:0" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAAAPCAMAAABEF7i9AAAAllBMVEUAAAD///+rsapERER3d3eIiIjMzMzu7u4iIiKUmZO6v7rKzsoODg4RERFVVVUNDQ0NDg0PEA8zMzNLTEtbXltmZmZydnF9gn2AgICPkI+ZmZmqqqq7u7vFxsXIzMgNDQwZGRkgICAhISEkJSMnKCcuMC4xMzE5Ozk7PTtBQkFCQkJDQ0Nna2eGhoaHh4ezuLLGysbd3d1wVGpAAAAAv0lEQVR42q2T2RKCMAxFk3QDBUEUF3Df9+X/f87WqTiMLwK906e2c3pv0gA4FzqVAZLRBYTdYoFP1O7WdPcB+oEoHmEbotaoIfCw+rqW0Cea9ZoBY4HSA6YYeBLZTmce2/raSxWBQ5ig10HOQ5XlyGOdeWrP3wurOhyAVKYrncRk5gHR/VE4/N/fj0OWhopnyKOywxpAigTmIaS6hskTz9tSDWsB90vHXfbntwJ4Wjv4h7otV8s7LppOiutZdqwXrQAI6Vlm1kYAAAAASUVORK5CYII=" /></a>
+    </footer>
+    <script>
+if ('serviceWorker' in navigator) {
+  (async () => {
+    try {
+      const reg =
+        navigator.serviceWorker.register('service-worker.js', { scope: './' });
+      let sw;
+      if (reg.installing) {
+        sw = reg.installing;
+        console.log('sw installing');
+      } else if (reg.waiting) {
+        sw = reg.waiting;
+        console.log('sw waiting');
+      } else if (reg.active) {
+        sw = reg.active;
+        console.log('sw active');
+      }
+      if (sw){
+        sw.addEventListener('statechange', e => {
+        });
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  })();
+}
+const root = location.protocol + '//' + location.host;
+const links = [].map.call(document.querySelectorAll('a'), e => e.href)
+  .filter(url => url.indexOf(root) == 0);
+console.log(links)
+// fetch urls -> DOMParser -> querySelector('main')
+// -> prefetch images, prerender math?
+// bfs?
+    </script>
+  </body>
+</html>
