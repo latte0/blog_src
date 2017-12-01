@@ -14,6 +14,7 @@ import qualified Data.Set as S
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import qualified Data.Text as T
 
+
 main :: IO ()
 main = do
     E.setLocaleEncoding E.utf8
@@ -73,7 +74,6 @@ main = do
                     >>= loadAndApplyTemplate "templates/default.html" archiveCtx
                     >>= relativizeUrls
 
-
         match "index.html" $ do
             route idRoute
             compile $ do
@@ -84,13 +84,13 @@ main = do
                         listField "posts" postCtx (return posts) <>
                         customCtx
 
-
                 getResourceBody
                     >>= applyAsTemplate indexCtx
                     >>= loadAndApplyTemplate "templates/default.html" indexCtx
                     >>= relativizeUrls
 
         match "templates/*" $ compile templateBodyCompiler
+
 
 buildCustomCtx :: Compiler (Context String)
 buildCustomCtx = do
@@ -102,10 +102,12 @@ buildCustomCtx = do
       <> constField "sanitizecss" sanitizecss
       <> constField "maincss" maincss
 
+
 buildPostCtx :: Compiler (Context String)
 buildPostCtx = do
     customCtx <- buildCustomCtx
     return $ dateField "date" "%F" <> customCtx
+
 
 customCompiler :: Compiler (Item String)
 customCompiler = do
@@ -124,9 +126,11 @@ customCompiler = do
 --    f = prerenderKaTeX >=> pygmentize >=> emojify -- TODO: investigate
     f = prerenderKaTeX' >=> pygmentize
 
+
 unixFilter' :: String -> [String] -> String -> Compiler String
 unixFilter' name args input =
     LBS.unpack <$> unixFilterLBS name args (LBS.pack input)
+
 
 -- TODO: respect display style (i.e. inline/block)
 callKaTeX :: Inline -> IO Inline
@@ -134,16 +138,20 @@ callKaTeX (Math _ input)
     = RawInline "html" <$> readCreateProcess (shell "node js/render.js") input
 callKaTeX x = return x
 
+
 callKaTeX' :: Inline -> Compiler Inline
 callKaTeX' (Math _ input)
     = RawInline "html" <$> unixFilter' "node" ["js/render.js"] input
 callKaTeX' x = return x
 
+
 prerenderKaTeX :: Pandoc -> Compiler Pandoc
 prerenderKaTeX = unsafeCompiler . PW.walkM callKaTeX
 
+
 prerenderKaTeX' :: Pandoc -> Compiler Pandoc
 prerenderKaTeX' = PW.walkM callKaTeX'
+
 
 -- https://github.com/jgm/pandoc/issues/3858
 -- https://github.com/jgm/pandoc/issues/629#issuecomment-8978606
@@ -159,11 +167,14 @@ codeBlockHack (CodeBlock attr str) =
     convAttr (_, code:_, _) = "class='language-" ++ code ++ "'"
 codeBlockHack block = block
 
+
 fixCodeBlocks :: Pandoc -> Pandoc
 fixCodeBlocks = PW.walk codeBlockHack
 
+
 pygmentize :: Pandoc -> Compiler Pandoc
 pygmentize = unsafeCompiler . PW.walkM callPygments
+
 
 callPygments :: Block -> IO Block
 callPygments (CodeBlock (_, lang:_, _) str) =
@@ -179,8 +190,10 @@ callPygments (CodeBlock (_, lang:_, _) str) =
     options = "noclasses"
 callPygments block = return block
 
+
 emojify :: Pandoc -> Compiler Pandoc
 emojify = unsafeCompiler . PW.walkM callTwemoji
+
 
 callTwemoji :: Inline -> IO Inline
 callTwemoji (Str str) = do
