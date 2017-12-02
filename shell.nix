@@ -10,7 +10,6 @@ in
       pcre
       zlib
       nodejs-9_x
-      pythonPackages.pygments
       coreutils
     ];
   }

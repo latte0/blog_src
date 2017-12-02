@@ -13,6 +13,7 @@ import Control.Monad ((>=>))
 import qualified Data.Set as S
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import qualified Data.Text as T
+import Data.Maybe
 import Codec.Binary.UTF8.String (decodeString)
 
 
@@ -27,8 +28,11 @@ main = do
 --        match "js/service-worker.js" $ do
 --            route idRoute
 --            compile copyFileCompiler
+        match "js/prism.js" $ do
+            route idRoute
+            compile copyFileCompiler
 
-        match (fromList [ "css/sanitize.css", "css/main.css" ])
+        match (fromList [ "css/sanitize.css", "css/prism.scs", "css/main.css" ])
             $ compile compressCssCompiler
 
         match "css/*.css" $ do
@@ -75,7 +79,7 @@ main = do
             route idRoute
             compile $ do
                 postCtx <- buildPostCtx
-                posts <- recentFirst =<< loadAll postPattern
+                posts <- take 10 <$> (recentFirst =<< loadAll postPattern)
                 let indexCtx = listField "posts" postCtx (return posts) <> postCtx
 
                 getResourceBody
@@ -109,10 +113,12 @@ postPattern = "posts/*"
 buildCustomCtx :: Compiler (Context String)
 buildCustomCtx = do
   sanitizecss <- loadBody "css/sanitize.css"
+  prismcss <- loadBody "css/prism.css"
   maincss <- loadBody "css/main.css"
   return
       $ constField "blogname" "mt_caret.log"
       <> constField "sanitizecss" sanitizecss
+      <> constField "prismcss" prismcss
       <> constField "maincss" maincss
       <> defaultContext
 
@@ -138,7 +144,7 @@ customCompiler = do
         { writerHighlight = False }
 --    f = prerenderKaTeX . fixCodeBlocks
 --    f = prerenderKaTeX >=> pygmentize >=> emojify
-    f = prerenderKaTeX >=> pygmentize
+    f = prerenderKaTeX . fixCodeBlocks
 
 
 unixFilter' :: String -> [String] -> String -> Compiler String
@@ -163,42 +169,14 @@ fixCodeBlocks =
     -- https://github.com/jgm/pandoc/issues/3858
     -- https://github.com/jgm/pandoc/issues/629#issuecomment-8978606
     codeBlockHack :: Block -> Block
-    codeBlockHack (CodeBlock attr str) =
+    codeBlockHack (CodeBlock (_, attr, _) str) =
         RawBlock "html"
-            $ "<pre><code "
-            ++ convAttr attr
-            ++ ">"
+            $ "<pre><code class='language-"
+            ++ fromMaybe "null" (listToMaybe attr)
+            ++ "'>"
             ++ escapeStringForXML str
             ++ "</code></pre>"
-      where
-        convAttr (_, code:_, _) = "class='language-" ++ code ++ "'"
     codeBlockHack block = block
-
-
-pygmentize :: Pandoc -> Compiler Pandoc
-pygmentize =
-    PW.walkM callPygments
-  where
-    callPygments :: Block -> Compiler Block
-    callPygments (CodeBlock (_, lang:_, _) str) =
-        RawBlock "html" . wrap <$> unixFilter' "pygmentize" args str
-      where
-        wrap html
-            = "<pre><code class='language-"
-            ++ lang
-            ++ "'>"
-            ++ html
-            ++ "</code></pre>"
-        args =
-            [ "-f"
-            , "html"
-            , "-O"
-            , options
-            , "-l"
-            , lang
-            ]
-        options = "noclasses"
-    callPygments block = return block
 
 
 emojify :: Pandoc -> Compiler Pandoc
