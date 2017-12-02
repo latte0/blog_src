@@ -9,10 +9,11 @@ import Text.Pandoc.Definition
 import Text.Pandoc.Readers.HTML
 import qualified Text.Pandoc.JSON as PJ
 import qualified Text.Pandoc.Walk as PW
-import Control.Monad
+import Control.Monad ((>=>))
 import qualified Data.Set as S
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import qualified Data.Text as T
+import Codec.Binary.UTF8.String (decodeString)
 
 
 main :: IO ()
@@ -23,38 +24,36 @@ main = do
             route   idRoute
             compile copyFileCompiler
 
-        match "js/service-worker.js" $ do
-            route idRoute
-            compile copyFileCompiler
+--        match "js/service-worker.js" $ do
+--            route idRoute
+--            compile copyFileCompiler
 
-        match "css/sanitize.css" $ do
-            compile compressCssCompiler
-
-        match "css/main.css" $ do
-            compile compressCssCompiler
+        match (fromList [ "css/sanitize.css", "css/main.css" ])
+            $ compile compressCssCompiler
 
         match "css/*.css" $ do
             route idRoute
             compile compressCssCompiler
 
-        match "css/**" $ do
+        match "css/fonts/*" $ do
             route idRoute
             compile copyFileCompiler
 
         match "about.md" $ do
-            route   $ setExtension "html"
+            route $ setExtension "html"
             compile $ do
                 customCtx <- buildCustomCtx
                 customCompiler
                     >>= loadAndApplyTemplate "templates/default.html" customCtx
                     >>= relativizeUrls
 
-        match "posts/*" $ do
+        match postPattern $ do
             route $ setExtension "html"
             compile $ do
                 postCtx <- buildPostCtx
                 customCompiler
                     >>= loadAndApplyTemplate "templates/post.html"    postCtx
+                    >>= saveSnapshot "content"
                     >>= loadAndApplyTemplate "templates/default.html" postCtx
                     >>= relativizeUrls
 
@@ -63,11 +62,9 @@ main = do
             compile $ do
                 postCtx <- buildPostCtx
                 customCtx <- buildCustomCtx
-                posts <- recentFirst =<< loadAll "posts/*"
+                posts <- recentFirst =<< loadAll postPattern
                 let archiveCtx =
-                        listField "posts" postCtx (return posts) <>
-                        constField "title" "Archives"            <>
-                        customCtx
+                        listField "posts" postCtx (return posts) <> customCtx
 
                 makeItem ""
                     >>= loadAndApplyTemplate "templates/archive.html" archiveCtx
@@ -78,11 +75,8 @@ main = do
             route idRoute
             compile $ do
                 postCtx <- buildPostCtx
-                customCtx <- buildCustomCtx
-                posts <- recentFirst =<< loadAll "posts/*"
-                let indexCtx =
-                        listField "posts" postCtx (return posts) <>
-                        customCtx
+                posts <- recentFirst =<< loadAll postPattern
+                let indexCtx = listField "posts" postCtx (return posts) <> postCtx
 
                 getResourceBody
                     >>= applyAsTemplate indexCtx
@@ -91,16 +85,36 @@ main = do
 
         match "templates/*" $ compile templateBodyCompiler
 
+        create ["atom.xml"] $ do
+            route idRoute
+            compile $ do
+                postCtx <- buildPostCtx
+                let feedCtx = postCtx <> bodyField "description"
+                posts <- fmap (take 10) . recentFirst
+                    =<< loadAllSnapshots postPattern "content"
+                renderAtom feedConfiguration feedCtx posts
+          where
+            feedConfiguration = FeedConfiguration
+              { feedTitle = "mt_caret.log"
+              , feedDescription = "A blog."
+              , feedAuthorName = "mt_caret"
+              , feedAuthorEmail = "mtakeda@keio.jp"
+              , feedRoot = "https://mt-caret.github.io/blog/"
+              }
+
+
+postPattern = "posts/*"
+
 
 buildCustomCtx :: Compiler (Context String)
 buildCustomCtx = do
   sanitizecss <- loadBody "css/sanitize.css"
   maincss <- loadBody "css/main.css"
   return
-      $ defaultContext
-      <> constField "blogname" "mt_caret.log"
+      $ constField "blogname" "mt_caret.log"
       <> constField "sanitizecss" sanitizecss
       <> constField "maincss" maincss
+      <> defaultContext
 
 
 buildPostCtx :: Compiler (Context String)
@@ -123,81 +137,76 @@ customCompiler = do
     wOpts = defaultHakyllWriterOptions
         { writerHighlight = False }
 --    f = prerenderKaTeX . fixCodeBlocks
---    f = prerenderKaTeX >=> pygmentize >=> emojify -- TODO: investigate
-    f = prerenderKaTeX' >=> pygmentize
+--    f = prerenderKaTeX >=> pygmentize >=> emojify
+    f = prerenderKaTeX >=> pygmentize
 
 
 unixFilter' :: String -> [String] -> String -> Compiler String
-unixFilter' name args input =
-    LBS.unpack <$> unixFilterLBS name args (LBS.pack input)
-
-
--- TODO: respect display style (i.e. inline/block)
-callKaTeX :: Inline -> IO Inline
-callKaTeX (Math _ input)
-    = RawInline "html" <$> readCreateProcess (shell "node js/render.js") input
-callKaTeX x = return x
-
-
-callKaTeX' :: Inline -> Compiler Inline
-callKaTeX' (Math _ input)
-    = RawInline "html" <$> unixFilter' "node" ["js/render.js"] input
-callKaTeX' x = return x
+unixFilter' name args input = unixFilter name args (decodeString input)
 
 
 prerenderKaTeX :: Pandoc -> Compiler Pandoc
-prerenderKaTeX = unsafeCompiler . PW.walkM callKaTeX
-
-
-prerenderKaTeX' :: Pandoc -> Compiler Pandoc
-prerenderKaTeX' = PW.walkM callKaTeX'
-
-
--- https://github.com/jgm/pandoc/issues/3858
--- https://github.com/jgm/pandoc/issues/629#issuecomment-8978606
-codeBlockHack :: Block -> Block
-codeBlockHack (CodeBlock attr str) =
-    RawBlock "html"
-        $ "<pre><code "
-        ++ convAttr attr
-        ++ ">"
-        ++ escapeStringForXML str
-        ++ "</code></pre>"
+prerenderKaTeX =
+    PW.walkM callKaTeX
   where
-    convAttr (_, code:_, _) = "class='language-" ++ code ++ "'"
-codeBlockHack block = block
+    -- TODO: respect display style (i.e. inline/block)
+    callKaTeX :: Inline -> Compiler Inline
+    callKaTeX (Math _ input)
+        = RawInline "html" <$> unixFilter' "node" ["js/render.js"] input
+    callKaTeX x = return x
 
 
 fixCodeBlocks :: Pandoc -> Pandoc
-fixCodeBlocks = PW.walk codeBlockHack
+fixCodeBlocks =
+    PW.walk codeBlockHack
+  where
+    -- https://github.com/jgm/pandoc/issues/3858
+    -- https://github.com/jgm/pandoc/issues/629#issuecomment-8978606
+    codeBlockHack :: Block -> Block
+    codeBlockHack (CodeBlock attr str) =
+        RawBlock "html"
+            $ "<pre><code "
+            ++ convAttr attr
+            ++ ">"
+            ++ escapeStringForXML str
+            ++ "</code></pre>"
+      where
+        convAttr (_, code:_, _) = "class='language-" ++ code ++ "'"
+    codeBlockHack block = block
 
 
 pygmentize :: Pandoc -> Compiler Pandoc
-pygmentize = unsafeCompiler . PW.walkM callPygments
-
-
-callPygments :: Block -> IO Block
-callPygments (CodeBlock (_, lang:_, _) str) =
-    RawBlock "html" . wrap <$> readCreateProcess (shell cmd) str
+pygmentize =
+    PW.walkM callPygments
   where
-    wrap html
-        = "<pre><code class='language-"
-        ++ lang
-        ++ "'>"
-        ++ html
-        ++ "</code></pre>"
-    cmd = "pygmentize -f html -O " ++ options ++ " -l " ++ lang
-    options = "noclasses"
-callPygments block = return block
+    callPygments :: Block -> Compiler Block
+    callPygments (CodeBlock (_, lang:_, _) str) =
+        RawBlock "html" . wrap <$> unixFilter' "pygmentize" args str
+      where
+        wrap html
+            = "<pre><code class='language-"
+            ++ lang
+            ++ "'>"
+            ++ html
+            ++ "</code></pre>"
+        args =
+            [ "-f"
+            , "html"
+            , "-O"
+            , options
+            , "-l"
+            , lang
+            ]
+        options = "noclasses"
+    callPygments block = return block
 
 
 emojify :: Pandoc -> Compiler Pandoc
-emojify = unsafeCompiler . PW.walkM callTwemoji
-
-
-callTwemoji :: Inline -> IO Inline
-callTwemoji (Str str) = do
-    res <- readCreateProcess (shell "node js/emojify.js") str
-    doc <- readHTML defaultHakyllReaderOptions $ T.pack res
-    return $ RawInline "html" res
-callTwemoji inline = return inline
+emojify =
+    PW.walkM callTwemoji
+  where
+    -- much too slow, implement natively in Haskell?
+    callTwemoji :: Inline -> Compiler Inline
+    callTwemoji (Str str) =
+        RawInline "html" <$> unixFilter' "node" ["js/emojify.js"] str
+    callTwemoji inline = return inline
