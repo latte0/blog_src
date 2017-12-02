@@ -2,7 +2,7 @@ html, body {
   height: 100%;
 }
 body {
-  max-width: 720px;
+  max-width: 700px;
   margin: auto;
   line-height: 1.6;
   font-size: 18px;
@@ -21,9 +21,9 @@ a#blogname {
 ul.entries {
   list-style-type: none;
   padding: 0px;
+  white-space: nowrap;
 }
 small.date {
-/*  padding-right: 5px;*/
   padding-right: 0.5ch;
 }
 header {
