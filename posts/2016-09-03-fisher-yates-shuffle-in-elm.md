@@ -1,6 +1,13 @@
 ---
+document_type: post
+language: ja
 title: Fisher-Yates shuffleのElm実装
 date: '2016-09-03'
+categories:
+- programming
+tags:
+- Elm
+- algorithm
 ---
 
 友人に頼まれてjQueryとUnderscore.jsで昔実装した
@@ -56,11 +63,10 @@ shuffle array =
     Array.foldr random_switch (constant array) ta
 ```
 
-
 これで色々遊んでいたらランタイムエラーが出ない事が売りのElmでこんなものが
 でました。
 
-![ランタイムエラー](/images/elm-runtime-error.png)
+![ランタイムエラー](/images/2016-09-03-screenshot.png)
 
 [coreのArray実装に問題があるようです。](https://github.com/elm-lang/core/issues/649)
 
