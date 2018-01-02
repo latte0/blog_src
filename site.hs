@@ -47,15 +47,25 @@ main = do
             route $ setExtension "html"
             compile $ do
                 customCtx <- buildCustomCtx
-                customCompiler
+                customCompiler False
                     >>= loadAndApplyTemplate "templates/default.html" customCtx
                     >>= relativizeUrls
 
-        match postPattern $ do
+        match mdPostPattern $ do
             route $ setExtension "html"
             compile $ do
                 postCtx <- buildPostCtx
-                customCompiler
+                customCompiler False
+                    >>= loadAndApplyTemplate "templates/post.html"    postCtx
+                    >>= saveSnapshot "content"
+                    >>= loadAndApplyTemplate "templates/default.html" postCtx
+                    >>= relativizeUrls
+
+        match lhsPostPattern $ do
+            route $ setExtension "html"
+            compile $ do
+                postCtx <- buildPostCtx
+                customCompiler True
                     >>= loadAndApplyTemplate "templates/post.html"    postCtx
                     >>= saveSnapshot "content"
                     >>= loadAndApplyTemplate "templates/default.html" postCtx
@@ -108,6 +118,8 @@ main = do
 
 
 postPattern = "posts/*"
+mdPostPattern = "posts/*.md"
+lhsPostPattern = "posts/*.lhs"
 
 
 buildCustomCtx :: Compiler (Context String)
@@ -129,15 +141,15 @@ buildPostCtx = do
     return $ dateField "date" "%F" <> customCtx
 
 
-customCompiler :: Compiler (Item String)
-customCompiler = do
+customCompiler :: Bool -> Compiler (Item String)
+customCompiler lhs = do
     pandocCompilerWithTransformM rOpts wOpts f
   where
     oldrExts = readerExtensions defaultHakyllReaderOptions
     rExts =
         [ Ext_east_asian_line_breaks
         , Ext_emoji
-        ]
+        ] ++ if lhs then [ Ext_literate_haskell ] else []
     rOpts = defaultHakyllReaderOptions
         { readerExtensions = foldr S.insert oldrExts rExts }
     wOpts = defaultHakyllWriterOptions
@@ -172,10 +184,12 @@ fixCodeBlocks =
     codeBlockHack (CodeBlock (_, attr, _) str) =
         RawBlock "html"
             $ "<pre><code class='language-"
-            ++ fromMaybe "null" (listToMaybe attr)
+            ++ (if lang == "sourceCode" then "haskell" else lang)
             ++ "'>"
             ++ escapeStringForXML str
             ++ "</code></pre>"
+      where
+        lang = fromMaybe "null" (listToMaybe attr)
     codeBlockHack block = block
 
 
